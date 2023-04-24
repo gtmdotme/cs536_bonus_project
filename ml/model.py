@@ -205,29 +205,30 @@ class SAE(LightningModule):
         x = x.reshape(batch_size, -1)
 
         # ae1 (1500 -> 400 -> 1500)
-        x = self.encoder1(x)
+        x = x1_ = self.encoder1(x)
         x1 = self.decoder1(x)
 
         # ae2 (400 -> 300 -> 400)
-        x = self.encoder2(x)
+        x = x2_ = self.encoder2(x)
         x2 = self.decoder2(x)
 
         # ae3 (300 -> 200 -> 300)
-        x = self.encoder3(x)
+        x = x3_ = self.encoder3(x)
         x3 = self.decoder3(x)
 
         # ae4 (200 -> 100 -> 200)
-        x = self.encoder4(x)
+        x = x4_ = self.encoder4(x)
         x4 = self.decoder4(x)
 
         # ae5 (100 ->  50 -> 100)
-        x = self.encoder5(x)
+        x = x5_ = self.encoder5(x)
         x5 = self.decoder5(x)
 
         # output (50 -> out_dim)
         x = self.out(x)
+        x = F.softmax(x, dim=1)
 
-        return x, [x1, x2, x3, x4, x5]
+        return x, [x1_, x1, x2_, x2, x3_, x3, x4_, x4, x5_, x5]
 
     def train_dataloader(self):
         # expect to get train folder
@@ -264,21 +265,22 @@ class SAE(LightningModule):
     def training_step(self, batch, batch_idx):
         x = batch["feature"].float()
         y = batch["label"].long()
-        y_hat, [y_hat1, y_hat2, y_hat3, y_hat4, y_hat5] = self(x)
+        y_hat, [x1_, x1, x2_, x2, x3_, x3, x4_, x4, x5_, x5] = self(x)
 
-        if self.train_ae_idx == 0:
-            entropy = F.cross_entropy(y_hat, y)
-        elif self.train_ae_idx == 1:
-            batch_size = len(x)
-            entropy = F.mse_loss(y_hat1, x.reshape(batch_size, -1))
+        batch_size = len(x)
+        if self.train_ae_idx == 1:
+            entropy = F.mse_loss(x1, x.reshape(batch_size, -1))
         elif self.train_ae_idx == 2:
-            entropy = F.mse_loss(y_hat2, y_hat1)
+            entropy = F.mse_loss(x2, x1_)
         elif self.train_ae_idx == 3:
-            entropy = F.mse_loss(y_hat3, y_hat2)
+            x_ = self.encoder1(x.reshape(batch_size, -1))
+            entropy = F.mse_loss(x3, x2_)
         elif self.train_ae_idx == 4:
-            entropy = F.mse_loss(y_hat4, y_hat3)
+            entropy = F.mse_loss(x4, x3_)
         elif self.train_ae_idx == 5:
-            entropy = F.mse_loss(y_hat5, y_hat4)
+            entropy = F.mse_loss(x5, x4_)
+        elif self.train_ae_idx == 0:
+            entropy = F.cross_entropy(y_hat, y)
 
         self.log(
             "training_loss",
